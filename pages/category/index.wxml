@@ -1,0 +1,10 @@
+<view class="wrap">
+  <goods-category
+    level="{{2}}"
+    custom-class="goods-category-class"
+    category="{{list}}"
+    init-active="{{[activeCategoryIndex]}}"
+    bind:change="onChange"
+    bind:changeCategory="onChangeCategory"
+  />
+</view>
