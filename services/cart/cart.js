@@ -1,20 +1,28 @@
-import { config } from '../../config/index';
+// services/cart/cart.js
 
-/** 获取购物车mock数据 */
-function mockFetchCartGroupData(params) {
-  const { delay } = require('../_utils/delay');
-  const { genCartGroupData } = require('../../model/cart');
-
-  return delay().then(() => genCartGroupData(params));
+// 封装获取购物车列表的服务
+export async function fetchCartList() {
+  try {
+    const res = await wx.cloud.callFunction({
+      name: 'cartOperation',
+      data: { action: 'getCartList' }
+    });
+    return res.result;
+  } catch (err) {
+    console.error('Service层请求购物车失败:', err);
+    throw err; // 将错误抛给页面层处理
+  }
 }
 
-/** 获取购物车数据 */
-export function fetchCartGroupData(params) {
-  if (config.useMock) {
-    return mockFetchCartGroupData(params);
+// 封装清空购物车的服务
+export async function clearCart(cartIds) {
+  try {
+    const res = await wx.cloud.callFunction({
+      name: 'cartOperation',
+      data: { action: 'clearCart', payload: { cartIds } }
+    });
+    return res.result;
+  } catch (err) {
+    throw err;
   }
-
-  return new Promise((resolve) => {
-    resolve('real api');
-  });
 }

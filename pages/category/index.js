@@ -1,8 +1,10 @@
+import { fetchCategories, fetchGoodsByCategory } from '../../services/good/fetchCategoryList';
+
 Page({
   data: {
     list: [],
     activeCategoryIndex: 0,
-    isLoading: false // 增加防抖锁，防止用户频繁上拉导致重复请求
+    isLoading: false
   },
 
   onLoad() {
@@ -21,6 +23,8 @@ Page({
     }
 
     const cachedCategories = wx.getStorageSync('categories_cache');
+
+    // 严查缓存的合法性，确保是带有 hasMore 字段的新版数据
     if (cachedCategories && cachedCategories.length > 0 && cachedCategories[0].hasMore !== undefined) {
       this.setData({ list: cachedCategories });
       this.loadGoodsForCategory(0, cachedCategories[0]._id);
@@ -32,15 +36,14 @@ Page({
     await this.fetchCategoriesFromCloud(true);
   },
 
+  // 获取分类列表
   async fetchCategoriesFromCloud(needLoadGoods = false) {
     try {
-      const res = await wx.cloud.callFunction({
-        name: 'getCategoryData',
-        data: { action: 'getCategories' }
-      });
+      // 核心修改：调用 Service 层接口，页面层不再感知 wx.cloud
+      const result = await fetchCategories();
 
-      if (res.result && res.result.success) {
-        const categories = res.result.data.map(item => ({
+      if (result && result.success) {
+        const categories = result.data.map(item => ({
           _id: item._id,
           name: item.name,
           children: [],
@@ -63,48 +66,37 @@ Page({
     }
   },
 
-  // 加载具体分类的商品
+  // 加载具体分类的商品（支持分页拉取）
   async loadGoodsForCategory(index, categoryId) {
     const category = this.data.list[index];
 
-    // 如果正在加载中，或者该分类已经没有更多数据了，直接 return
     if (this.data.isLoading || !category.hasMore) return;
 
     this.setData({ isLoading: true });
-    // 如果是第一页显示大 loading 框，后续分页可以在底部显示小 loading 或静默拉取
     if (category.page === 1) {
       wx.showLoading({ title: '加载商品...', mask: true });
     }
 
     try {
-      const res = await wx.cloud.callFunction({
-        name: 'getCategoryData',
-        data: {
-          action: 'getGoodsByCategory',
-          categoryId: categoryId,
-          page: category.page, // 传入当前分类的页码
-          pageSize: 20         // 每次拉取 20 条
-        }
-      });
+      // 核心修改：调用 Service 层接口，传入参数
+      const result = await fetchGoodsByCategory(categoryId, category.page, 20);
 
-      if (res.result && res.result.success) {
-        const newGoodsList = res.result.data.map(item => ({
+      if (result && result.success) {
+        const newGoodsList = result.data.map(item => ({
           _id: item._id,
           name: item.title,
           thumbnail: item.thumb,
           price: item.price
         }));
 
-        // 拼接路径，准备局部更新数据
         const updateChildrenPath = `list[${index}].children`;
         const updatePagePath = `list[${index}].page`;
         const updateHasMorePath = `list[${index}].hasMore`;
 
         this.setData({
-          // 将新数据 concat 追加到原有数组后面
           [updateChildrenPath]: category.children.concat(newGoodsList),
-          [updatePagePath]: category.page + 1,        // 页码 +1
-          [updateHasMorePath]: res.result.hasMore     // 更新是否还有更多的状态
+          [updatePagePath]: category.page + 1,
+          [updateHasMorePath]: result.hasMore
         });
       }
     } catch (error) {
@@ -120,7 +112,6 @@ Page({
   onLoadMore() {
     const index = this.data.activeCategoryIndex;
     const category = this.data.list[index];
-    // 触发加载
     this.loadGoodsForCategory(index, category._id);
   },
 
@@ -130,7 +121,6 @@ Page({
 
     this.setData({ activeCategoryIndex: index });
 
-    // 只有当该分类从来没有加载过数据，且允许加载时，才去云端拉取
     if (category && category.children.length === 0 && category.hasMore) {
       this.loadGoodsForCategory(index, category._id);
     }

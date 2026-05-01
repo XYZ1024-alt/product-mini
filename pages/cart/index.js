@@ -1,4 +1,4 @@
-import Dialog from 'tdesign-miniprogram/dialog/index';
+import { fetchCartList, clearCart } from '../../services/cart/cart';
 import Toast from 'tdesign-miniprogram/toast/index';
 
 Page({
@@ -83,24 +83,12 @@ Page({
   },
 
   async getCartGroupData() {
-    try {
-      const res = await wx.cloud.callFunction({
-        name: 'cartOperation',
-        data: { action: 'getCartList' }
-      });
-
-      if (res.result && res.result.success) {
-        if (res.result.data.length === 0) {
-          return { data: { isNotEmpty: false, storeGoods: [] } };
-        }
-        const formattedData = this.formatCartData(res.result.data);
-        return { data: formattedData };
-      }
-      return { data: { isNotEmpty: false, storeGoods: [] } };
-    } catch (err) {
-      console.error('拉取购物车失败:', err);
-      return { data: { isNotEmpty: false, storeGoods: [] } };
+    const result = await fetchCartList();
+    if (result && result.success) {
+      const formattedData = this.formatCartData(result.data);
+      return { data: formattedData };
     }
+    return { data: { isNotEmpty: false, storeGoods: [] } };
   },
 
   formatCartData(list) {

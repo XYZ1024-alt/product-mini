@@ -1,13 +1,6 @@
 import { config } from '../../config/index';
 
 /** 获取优惠券列表 */
-function mockFetchCoupon(status) {
-  const { delay } = require('../_utils/delay');
-  const { getCouponList } = require('../../model/coupon');
-  return delay().then(() => getCouponList(status));
-}
-
-/** 获取优惠券列表 */
 export function fetchCouponList(status = 'default') {
   if (config.useMock) {
     return mockFetchCoupon(status);
