@@ -7,14 +7,7 @@ import { getAddressPromise } from '../../../../services/address/edit';
 Page({
   data: {
     addressList: [],
-    deleteID: '',
-    showDeleteConfirm: false,
   },
-
-  /** 选择模式 */
-  selectMode: false,
-  /** 是否已经选择地址，不置为true的话页面离开时会触发取消选择行为 */
-  hasSelect: false,
 
   onShow() {
     this.init();
@@ -29,37 +22,24 @@ Page({
     this.init();
   },
 
-  init() {
-    this.getAddressList();
+  async init() {
+    wx.showLoading({ title: '加载中' });
+    try {
+      const list = await fetchDeliveryAddressList();
+
+      this.setData({
+        addressList: list || []
+      });
+    } catch (err) {
+      console.error('页面加载地址失败', err);
+      wx.showToast({ title: '获取列表失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
   onUnload() {
     if (this.selectMode && !this.hasSelect) {
       rejectAddress();
-    }
-  },
-  async getAddressList() {
-    wx.showLoading({ title: '加载中...' });
-    try {
-      const res = await wx.cloud.callFunction({
-        name: 'getAddressList'
-      });
-
-      if (res.result.code === 0) {
-        // 将云数据库的数据格式化为前端组件需要的格式
-        const list = res.result.data.map(item => ({
-          ...item,
-          id: item._id, // 组件通常需要 id 字段
-          // 拼接完整的地址字符串用于显示
-          addressInfo: `${item.provinceName}${item.cityName}${item.districtName}${item.detailAddress}`
-        }));
-
-        this.setData({ addressList: list });
-      }
-      wx.hideLoading();
-    } catch (err) {
-      wx.hideLoading();
-      console.error('获取地址列表失败', err);
-      wx.showToast({ title: '获取列表失败', icon: 'none' });
     }
   },
   onEdit(e) {

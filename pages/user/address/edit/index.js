@@ -1,8 +1,11 @@
+import { areaData } from '../../../../config/index';
 import Toast from 'tdesign-miniprogram/toast/index';
-import { areaData } from '../../../../config/index'; // 保留级联选择器数据
+import { commitAddress } from '../../../../services/address/edit';
 
 const innerPhoneReg = '^1\\d{10}$';
-const innerNameReg = '^[a-zA-Z\\d\\u4e00-\\u9fa5]+$'; //
+import { fetchDeliveryAddress } from '../../../../services/address/fetchAddress';
+import { resolveAddress } from '../../../../services/address/list';
+
 const labelsOptions = [
   { id: 0, name: '家' },
   { id: 1, name: '公司' },
@@ -34,14 +37,23 @@ Page({
     verifyTips: '',
   },
 
-  onLoad(options) {
-    const { id } = options; // 如果是编辑，会有 id 传过来[cite: 3]
+  async onLoad(options) {
+    const { id } = options;
     if (id) {
-      this.fetchAddressDetail(id);
+      this.setData({ addressId: id });
+      this.loadDetail(id);
     }
   },
 
-  // 1. 从云数据库获取地址详情（替换原来的 fetchDeliveryAddress）
+  async loadDetail(id) {
+    wx.showLoading({ title: '加载中' });
+    const detail = await fetchDeliveryAddress(id);
+    if (detail) {
+      this.setData({ addressInfo: detail });
+    }
+    wx.hideLoading();
+  },
+
   async fetchAddressDetail(id) {
     const db = wx.cloud.database();
     try {
@@ -54,7 +66,6 @@ Page({
     }
   },
 
-  // 2. 核心：处理输入改变（去掉了 Code 的存储）
   onInputValue(e) {
     const { item } = e.currentTarget.dataset;
     if (item === 'address') {
@@ -70,8 +81,20 @@ Page({
       this.setData({ [`locationState.${item}`]: value }, () => this.checkForm());
     }
   },
-
-  // 3. 提交保存（接入云函数 saveAddress）
+  async onDelete() {
+    const { addressId } = this.data;
+    wx.showModal({
+      title: '提示',
+      content: '确定删除吗？',
+      success: async (res) => {
+        if (res.confirm) {
+          await deleteAddress(addressId);
+          wx.showToast({ title: '已删除' });
+          setTimeout(() => wx.navigateBack(), 1500);
+        }
+      }
+    });
+  },
   async formSubmit() {
     if (!this.data.submitActive) {
       Toast({ context: this, selector: '#t-toast', message: this.privateData.verifyTips });
@@ -80,25 +103,22 @@ Page({
 
     wx.showLoading({ title: '保存中...' });
     try {
-      const res = await wx.cloud.callFunction({
-        name: 'saveAddress',
-        data: this.data.locationState
-      });
+      const { locationState } = this.data;
+      const id = locationState._id || '';
 
-      if (res.result.code === 0) {
-        wx.hideLoading();
-        wx.showToast({ title: '保存成功', icon: 'success' });
-        setTimeout(() => wx.navigateBack(), 1000);
-      }
+      // 修复点：严格确保第一个参数传数据对象，第二个参数传 ID
+      await commitAddress(locationState, id);
+
+      wx.hideLoading();
+      wx.showToast({ title: '保存成功', icon: 'success' });
+      setTimeout(() => wx.navigateBack(), 1000);
     } catch (err) {
       wx.hideLoading();
+      console.error('提交失败', err);
       wx.showToast({ title: '保存失败', icon: 'none' });
     }
   },
 
-  // --- 保留原有的高级功能函数 ---
-
-  // 表单校验[cite: 3]
   checkForm() {
     const { isLegal, tips } = this.onVerifyInputLegal();
     this.setData({ submitActive: isLegal });
