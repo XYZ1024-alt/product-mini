@@ -4,23 +4,23 @@
 
 <view class="cart-group">
   <view class="goods-wrap" wx:for="{{storeGoods}}" wx:for-item="store" wx:for-index="si" wx:key="storeId">
-    <view class="cart-store">
-      <t-icon
-        size="40rpx"
-        color="{{store.isSelected ? '#FA4126' : '#BBBBBB'}}"
-        name="{{store.isSelected ? 'check-circle-filled' : 'circle'}}"
-        class="cart-store__check"
-        bindtap="selectStore"
-        data-store-index="{{si}}"
-      />
-      <view class="cart-store__content">
-        <view class="store-title">
+<!--    <view class="cart-store">-->
+<!--      <t-icon-->
+<!--        size="40rpx"-->
+<!--        color="{{store.isSelected ? '#FA4126' : '#BBBBBB'}}"-->
+<!--        name="{{store.isSelected ? 'check-circle-filled' : 'circle'}}"-->
+<!--        class="cart-store__check"-->
+<!--        bindtap="selectStore"-->
+<!--        data-store-index="{{si}}"-->
+<!--      />-->
+<!--      <view class="cart-store__content">-->
+<!--        <view class="store-title">-->
 <!--          <t-icon prefix="wr" size="40rpx" color="#333333" name="store" />-->
-          <view class="store-name">{{store.storeName}}</view>
-        </view>
+<!--          <view class="store-name">{{store.storeName}}</view>-->
+<!--        </view>-->
 <!--        <view class="get-coupon" catch:tap="gotoCoupons">优惠券</view>-->
-      </view>
-    </view>
+<!--      </view>-->
+<!--    </view>-->
     <block wx:for="{{store.promotionGoodsList}}" wx:for-item="promotion" wx:for-index="promoindex" wx:key="promoindex">
       <view
         class="promotion-wrap"

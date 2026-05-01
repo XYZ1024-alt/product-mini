@@ -6,5 +6,6 @@
     init-active="{{[activeCategoryIndex]}}"
     bind:change="onChange"
     bind:changeCategory="onChangeCategory"
+    bind:loadMore="onLoadMore"
   />
 </view>

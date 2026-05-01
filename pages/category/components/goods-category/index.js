@@ -26,6 +26,7 @@ Component({
   data: {
     activeKey: 0,
     subActiveKey: 0,
+    scrollTop: 0,
   },
   attached() {
     if (this.properties.initActive && this.properties.initActive.length > 0) {
@@ -58,6 +59,7 @@ Component({
           {
             activeKey: key,
             subActiveKey: subKey,
+            scrollTop: 0,
           },
           () => {
             resolve();
@@ -65,5 +67,8 @@ Component({
         );
       });
     },
+    onScrollToLower() {
+      this.triggerEvent('loadMore');
+    }
   },
 });

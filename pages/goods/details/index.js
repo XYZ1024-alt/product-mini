@@ -1,65 +1,17 @@
 import Toast from 'tdesign-miniprogram/toast/index';
-import { fetchGood } from '../../../services/good/fetchGood';
-import { fetchActivityList } from '../../../services/activity/fetchActivityList';
-import {
-  getGoodsDetailsCommentList,
-  getGoodsDetailsCommentsCount,
-} from '../../../services/good/fetchGoodsDetailsComments';
-
 import { cdnBase } from '../../../config/index';
 
 const imgPrefix = `${cdnBase}/`;
-
 const recLeftImg = `${imgPrefix}common/rec-left.png`;
 const recRightImg = `${imgPrefix}common/rec-right.png`;
-const obj2Params = (obj = {}, encode = false) => {
-  const result = [];
-  Object.keys(obj).forEach((key) => result.push(`${key}=${encode ? encodeURIComponent(obj[key]) : obj[key]}`));
-
-  return result.join('&');
-};
 
 Page({
   data: {
-    commentsList: [],
-    commentsStatistics: {
-      badCount: 0,
-      commentCount: 0,
-      goodCount: 0,
-      goodRate: 0,
-      hasImageCount: 0,
-      middleCount: 0,
-    },
     isShowPromotionPop: false,
     activityList: [],
     recLeftImg,
     recRightImg,
     details: {},
-    goodsTabArray: [
-      {
-        name: '商品',
-        value: '', // 空字符串代表置顶
-      },
-      {
-        name: '详情',
-        value: 'goods-page',
-      },
-    ],
-    storeLogo: `${imgPrefix}common/store-logo.png`,
-    storeName: '云mall标准版旗舰店',
-    jumpArray: [
-      {
-        title: '首页',
-        url: '/pages/home/home',
-        iconName: 'home',
-      },
-      {
-        title: '购物车',
-        url: '/pages/cart/index',
-        iconName: 'cart',
-        showCartNum: true,
-      },
-    ],
     isStock: true,
     cartNum: 0,
     soldout: false,
@@ -72,7 +24,7 @@ Page({
     isSpuSelectPopupShow: false,
     isAllSelectedSku: false,
     buyType: 0,
-    outOperateStatus: false, // 是否外层加入购物车
+    outOperateStatus: false,
     operateType: 0,
     selectSkuSellsPrice: 0,
     maxLinePrice: 0,
@@ -85,13 +37,12 @@ Page({
     autoplay: true,
     duration: 500,
     interval: 5000,
-    soldNum: 0, // 已售数量
+    soldNum: 0,
+    isLoading: true, // 新增：用于骨架屏或隐藏未加载完的白屏
   },
 
   handlePopupHide() {
-    this.setData({
-      isSpuSelectPopupShow: false,
-    });
+    this.setData({ isSpuSelectPopupShow: false });
   },
 
   showSkuSelectPopup(type) {
@@ -112,9 +63,7 @@ Page({
 
   toNav(e) {
     const { url } = e.detail;
-    wx.switchTab({
-      url: url,
-    });
+    wx.switchTab({ url: url });
   },
 
   showCurImg(e) {
@@ -122,26 +71,17 @@ Page({
     const { images } = this.data.details;
     wx.previewImage({
       current: images[index],
-      urls: images, // 需要预览的图片http链接列表
+      urls: images,
     });
-  },
-
-  onPageScroll({ scrollTop }) {
-    const goodsTab = this.selectComponent('#goodsTab');
-    goodsTab && goodsTab.onScroll(scrollTop);
   },
 
   chooseSpecItem(e) {
     const { specList } = this.data.details;
     const { selectedSku, isAllSelectedSku } = e.detail;
     if (!isAllSelectedSku) {
-      this.setData({
-        selectSkuSellsPrice: 0,
-      });
+      this.setData({ selectSkuSellsPrice: 0 });
     }
-    this.setData({
-      isAllSelectedSku,
-    });
+    this.setData({ isAllSelectedSku });
     this.getSkuItem(specList, selectedSku);
   },
 
@@ -152,7 +92,7 @@ Page({
     selectedSkuValues.forEach((item) => {
       selectedAttrStr += `，${item.specValue}  `;
     });
-    // eslint-disable-next-line array-callback-return
+
     const skuItem = skuArray.filter((item) => {
       let status = true;
       (item.specInfo || []).forEach((subItem) => {
@@ -162,11 +102,13 @@ Page({
       });
       if (status) return item;
     });
+
     this.selectSpecsName(selectedSkuValues.length > 0 ? selectedAttrStr : '');
-    if (skuItem) {
+
+    if (skuItem && skuItem.length > 0) {
       this.setData({
-        selectItem: skuItem,
-        selectSkuSellsPrice: skuItem.price || 0,
+        selectItem: skuItem[0],
+        selectSkuSellsPrice: skuItem[0].price || 0,
       });
     } else {
       this.setData({
@@ -175,11 +117,10 @@ Page({
       });
     }
     this.setData({
-      specImg: skuItem && skuItem.skuImage ? skuItem.skuImage : primaryImage,
+      specImg: skuItem && skuItem[0] && skuItem[0].skuImage ? skuItem[0].skuImage : primaryImage,
     });
   },
 
-  // 获取已选择的sku名称
   getSelectedSkuValues(skuTree, selectedSku) {
     const normalizedTree = this.normalizeSkuTree(skuTree);
     return Object.keys(selectedSku).reduce((selectedValues, skuKeyStr) => {
@@ -197,6 +138,7 @@ Page({
 
   normalizeSkuTree(skuTree) {
     const normalizedTree = {};
+    if (!skuTree) return normalizedTree;
     skuTree.forEach((treeItem) => {
       normalizedTree[treeItem.specId] = treeItem.specValueList;
     });
@@ -204,15 +146,9 @@ Page({
   },
 
   selectSpecsName(selectSpecsName) {
-    if (selectSpecsName) {
-      this.setData({
-        selectedAttrStr: selectSpecsName,
-      });
-    } else {
-      this.setData({
-        selectedAttrStr: '',
-      });
-    }
+    this.setData({
+      selectedAttrStr: selectSpecsName || '',
+    });
   },
 
   async addCart() {
@@ -220,23 +156,15 @@ Page({
     const db = wx.cloud.database();
     const _ = db.command;
 
-    // 1. 基础校验：检查库存状态 [cite: 13]
     if (!isStock) {
-      Toast({
-        context: this,
-        selector: '#t-toast',
-        message: '该商品暂时缺货',
-        duration: 1500,
-      });
+      Toast({ context: this, selector: '#t-toast', message: '该商品暂时缺货', duration: 1500 });
       return;
     }
 
-    wx.showLoading({ title: '正在加入购物车' });
+    wx.showLoading({ title: '正在加入购物车', mask: true });
 
     try {
-      const cartRes = await db.collection('cart').where({
-        spuId: spuId
-      }).get();
+      const cartRes = await db.collection('cart').where({ spuId: spuId }).get();
 
       if (cartRes.data.length > 0) {
         const recordId = cartRes.data[0]._id;
@@ -258,13 +186,7 @@ Page({
       }
 
       wx.hideLoading();
-      Toast({
-        context: this,
-        selector: '#t-toast',
-        message: '成功加入购物车',
-        duration: 1000,
-      });
-
+      Toast({ context: this, selector: '#t-toast', message: '成功加入购物车', duration: 1000 });
       this.handlePopupHide();
 
     } catch (err) {
@@ -275,11 +197,9 @@ Page({
   },
 
   gotoBuy() {
-    const { details, buyNum, spuId, selectItem } = this.data;
-
+    const { details, buyNum, spuId } = this.data;
     this.handlePopupHide();
 
-    // 直接使用 spuId 作为标识，不再去查不存在的 skuList 数组
     const query = {
       quantity: buyNum,
       storeId: '1',
@@ -287,64 +207,50 @@ Page({
       goodsName: details.title,
       skuId: spuId,
       price: details.price,
-      specInfo: [], // 传空，订单页就不会显示多余的规格文字
+      specInfo: [],
       primaryImage: this.data.primaryImage,
       thumb: this.data.primaryImage,
       title: details.title,
     };
 
     const urlQueryStr = `?goodsRequestList=${JSON.stringify([query])}`;
-    wx.navigateTo({
-      url: `/pages/order/order-confirm/index${urlQueryStr}`,
-    });
+    wx.navigateTo({ url: `/pages/order/order-confirm/index${urlQueryStr}` });
   },
 
   specsConfirm() {
-    const { buyType } = this.data;
-    if (buyType === 1) {
+    if (this.data.buyType === 1) {
       this.gotoBuy();
     } else {
       this.addCart();
     }
-    // this.handlePopupHide();
   },
 
   changeNum(e) {
-    // 打印一下，看看组件到底传回了什么
-    console.log('数量改变事件详情:', e.detail);
-
-    // 兼容性处理：优先取 buyNum，如果没有则尝试取 value
     const num = e.detail.buyNum || e.detail.value;
-
     if (num) {
       this.setData({
         buyNum: num,
-        // 同步更新“已选”栏位的文字显示
         selectedAttrStr: `件`
       });
     }
   },
 
   closePromotionPopup() {
-    this.setData({
-      isShowPromotionPop: false,
-    });
+    this.setData({ isShowPromotionPop: false });
   },
 
   promotionChange(e) {
     const { index } = e.detail;
-    wx.navigateTo({
-      url: `/pages/promotion/promotion-detail/index?promotion_id=${index}`,
-    });
+    wx.navigateTo({ url: `/pages/promotion/promotion-detail/index?promotion_id=${index}` });
   },
 
   showPromotionPopup() {
-    this.setData({
-      isShowPromotionPop: true,
-    });
+    this.setData({ isShowPromotionPop: true });
   },
 
+  // ✨ 核心优化：增加 Loading 和 错误处理
   async getDetail(spuId) {
+    wx.showLoading({ title: '加载中...', mask: true }); // 防止用户在白屏期间乱点
     const db = wx.cloud.database();
     try {
       const res = await db.collection('goods').doc(spuId).get();
@@ -364,103 +270,44 @@ Page({
       this.setData({
         details,
         spuId: spuId,
-        // 核心设置：默认已全选，且选中这个虚拟 SKU
         isAllSelectedSku: true,
         selectItem: virtualSku,
         skuArray: [virtualSku],
-
-        selectedAttrStr: '件', // 初始提示文字
+        selectedAttrStr: '件',
         primaryImage: details.thumb || details.images[0],
-        specImg: details.thumb || details.images[0], // 弹窗图片
+        specImg: details.thumb || details.images[0],
         minSalePrice: details.price,
         maxSalePrice: details.price,
         isStock: (details.stock || 0) > 0,
         soldNum: details.soldNum || 0,
+        isLoading: false // 数据加载完成
       });
     } catch (err) {
       console.error('获取详情失败', err);
-    }
-  },
-
-  async getCommentsList() {
-    try {
-      const code = 'Success';
-      const data = await getGoodsDetailsCommentList();
-      const { homePageComments } = data;
-      if (code.toUpperCase() === 'SUCCESS') {
-        const nextState = {
-          commentsList: homePageComments.map((item) => {
-            return {
-              goodsSpu: item.spuId,
-              userName: item.userName || '',
-              commentScore: item.commentScore,
-              commentContent: item.commentContent || '用户未填写评价',
-              userHeadUrl: item.isAnonymity ? this.anonymityAvatar : item.userHeadUrl || this.anonymityAvatar,
-            };
-          }),
-        };
-        this.setData(nextState);
-      }
-    } catch (error) {
-      console.error('comments error:', error);
+      wx.showToast({ title: '商品已下架', icon: 'error' });
+    } finally {
+      wx.hideLoading(); // 无论成功失败，关闭 loading
     }
   },
 
   onShareAppMessage() {
-    // 自定义的返回信息
     const { selectedAttrStr } = this.data;
     let shareSubTitle = '';
     if (selectedAttrStr.indexOf('件') > -1) {
       const count = selectedAttrStr.indexOf('件');
       shareSubTitle = selectedAttrStr.slice(count + 1, selectedAttrStr.length);
     }
-    const customInfo = {
-      imageUrl: this.data.details.primaryImage,
+    return {
+      imageUrl: this.data.primaryImage,
       title: this.data.details.title + shareSubTitle,
       path: `/pages/goods/details/index?spuId=${this.data.spuId}`,
     };
-    return customInfo;
-  },
-
-  /** 获取评价统计 */
-  async getCommentsStatistics() {
-    try {
-      const code = 'Success';
-      const data = await getGoodsDetailsCommentsCount();
-      if (code.toUpperCase() === 'SUCCESS') {
-        const { badCount, commentCount, goodCount, goodRate, hasImageCount, middleCount } = data;
-        const nextState = {
-          commentsStatistics: {
-            badCount: parseInt(`${badCount}`),
-            commentCount: parseInt(`${commentCount}`),
-            goodCount: parseInt(`${goodCount}`),
-            /** 后端返回百分比后数据但没有限制位数 */
-            goodRate: Math.floor(goodRate * 10) / 10,
-            hasImageCount: parseInt(`${hasImageCount}`),
-            middleCount: parseInt(`${middleCount}`),
-          },
-        };
-        this.setData(nextState);
-      }
-    } catch (error) {
-      console.error('comments statiistics error:', error);
-    }
-  },
-
-  /** 跳转到评价列表 */
-  navToCommentsListPage() {
-    wx.navigateTo({
-      url: `/pages/goods/comments/index?spuId=${this.data.spuId}`,
-    });
   },
 
   onLoad(query) {
     const { spuId } = query;
-    this.setData({
-      spuId: spuId,
-    });
+    this.setData({ spuId: spuId });
+    // 原来这里有 3 个请求导致卡顿，现在只保留了获取详情 1 个请求
     this.getDetail(spuId);
-    this.getCommentsList(spuId);
-    this.getCommentsStatistics(spuId);
   },
 });

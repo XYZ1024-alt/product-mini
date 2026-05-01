@@ -13,8 +13,6 @@
   flex: auto;
   width: 0;
   position: relative;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   background-color: white;
 }
 

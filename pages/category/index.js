@@ -1,6 +1,8 @@
 Page({
   data: {
     list: [],
+    activeCategoryIndex: 0,
+    isLoading: false // 增加防抖锁，防止用户频繁上拉导致重复请求
   },
 
   onLoad() {
@@ -8,98 +10,128 @@ Page({
   },
 
   onShow() {
-    this.getTabBar().init();
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().init();
+    }
   },
 
   async init() {
+    if (wx.cloud) {
+      wx.cloud.init();
+    }
+
+    const cachedCategories = wx.getStorageSync('categories_cache');
+    if (cachedCategories && cachedCategories.length > 0 && cachedCategories[0].hasMore !== undefined) {
+      this.setData({ list: cachedCategories });
+      this.loadGoodsForCategory(0, cachedCategories[0]._id);
+      this.fetchCategoriesFromCloud(false);
+      return;
+    }
+
+    wx.showLoading({ title: '加载中...', mask: true });
+    await this.fetchCategoriesFromCloud(true);
+  },
+
+  async fetchCategoriesFromCloud(needLoadGoods = false) {
     try {
-      const db = wx.cloud.database();
-      // 获取分类表数据，并按 sort 排序
-      const res = await db.collection('categories').orderBy('sort', 'asc').get();
-
-      const categories = res.data.map(item => ({
-        _id: item._id,
-        name: item.name,
-        children: []
-      }));
-
-      this.setData({
-        list: categories,
+      const res = await wx.cloud.callFunction({
+        name: 'getCategoryData',
+        data: { action: 'getCategories' }
       });
 
-      if (categories.length > 0) {
-        this.loadGoodsForCategory(0, categories[0]._id);
+      if (res.result && res.result.success) {
+        const categories = res.result.data.map(item => ({
+          _id: item._id,
+          name: item.name,
+          children: [],
+          page: 1,
+          hasMore: true
+        }));
+
+        this.setData({ list: categories });
+        wx.setStorageSync('categories_cache', categories);
+
+        if (needLoadGoods && categories.length > 0) {
+          await this.loadGoodsForCategory(0, categories[0]._id);
+        }
       }
     } catch (error) {
       console.error('初始化分类失败:', error);
+      wx.showToast({ title: '网络异常，请重试', icon: 'none' });
+    } finally {
+      wx.hideLoading();
     }
   },
 
+  // 加载具体分类的商品
   async loadGoodsForCategory(index, categoryId) {
-    const db = wx.cloud.database();
-    const MAX_LIMIT = 20; // 微信小程序端每次查询的限制数
+    const category = this.data.list[index];
+
+    // 如果正在加载中，或者该分类已经没有更多数据了，直接 return
+    if (this.data.isLoading || !category.hasMore) return;
+
+    this.setData({ isLoading: true });
+    // 如果是第一页显示大 loading 框，后续分页可以在底部显示小 loading 或静默拉取
+    if (category.page === 1) {
+      wx.showLoading({ title: '加载商品...', mask: true });
+    }
 
     try {
-      // 1. 先查询该分类下的商品总数
-      const countResult = await db.collection('goods').where({
-        categoryId: categoryId.trim()
-      }).count();
-      const total = countResult.total;
+      const res = await wx.cloud.callFunction({
+        name: 'getCategoryData',
+        data: {
+          action: 'getGoodsByCategory',
+          categoryId: categoryId,
+          page: category.page, // 传入当前分类的页码
+          pageSize: 20         // 每次拉取 20 条
+        }
+      });
 
-      if (total === 0) {
-        console.warn('该分类下没有查询到商品');
-        return;
+      if (res.result && res.result.success) {
+        const newGoodsList = res.result.data.map(item => ({
+          _id: item._id,
+          name: item.title,
+          thumbnail: item.thumb,
+          price: item.price
+        }));
+
+        // 拼接路径，准备局部更新数据
+        const updateChildrenPath = `list[${index}].children`;
+        const updatePagePath = `list[${index}].page`;
+        const updateHasMorePath = `list[${index}].hasMore`;
+
+        this.setData({
+          // 将新数据 concat 追加到原有数组后面
+          [updateChildrenPath]: category.children.concat(newGoodsList),
+          [updatePagePath]: category.page + 1,        // 页码 +1
+          [updateHasMorePath]: res.result.hasMore     // 更新是否还有更多的状态
+        });
       }
-
-      // 2. 计算需要分几次来查询 (例如 38/20，向上取整需要查 2 次)
-      const batchTimes = Math.ceil(total / MAX_LIMIT);
-      const tasks = [];
-
-      // 3. 循环组装所有的查询请求
-      for (let i = 0; i < batchTimes; i++) {
-        const promise = db.collection('goods').where({
-          categoryId: categoryId.trim()
-        })
-            .skip(i * MAX_LIMIT) // 第一批跳过 0 条，第二批跳过 20 条
-            .limit(MAX_LIMIT)
-            .get();
-
-        tasks.push(promise);
-      }
-
-      // 4. 发起所有查询并等待完成，然后拼接数据
-      const results = await Promise.all(tasks);
-      let allGoodsData = [];
-      for (let i = 0; i < results.length; i++) {
-        allGoodsData = allGoodsData.concat(results[i].data);
-      }
-
-      // 5. 将拼装后的所有数据格式化
-      const goodsList = allGoodsData.map(item => ({
-        _id: item._id,
-        name: item.title,
-        thumbnail: item.thumb,
-        price: item.price
-      }));
-
-      // 6. 更新到当前分类的 children 数组中
-      const updatePath = `list[${index}].children`;
-      this.setData({ [updatePath]: goodsList });
-
     } catch (error) {
       console.error('获取分类商品失败:', error);
+      wx.showToast({ title: '拉取失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ isLoading: false });
+      wx.hideLoading();
     }
+  },
+
+  // 触底加载更多事件
+  onLoadMore() {
+    const index = this.data.activeCategoryIndex;
+    const category = this.data.list[index];
+    // 触发加载
+    this.loadGoodsForCategory(index, category._id);
   },
 
   onChange(e) {
     const index = e.detail.value !== undefined ? e.detail.value : e.detail[0];
     const category = this.data.list[index];
 
-    this.setData({
-      activeCategoryIndex: index
-    });
+    this.setData({ activeCategoryIndex: index });
 
-    if (category && (!category.children || category.children.length === 0)) {
+    // 只有当该分类从来没有加载过数据，且允许加载时，才去云端拉取
+    if (category && category.children.length === 0 && category.hasMore) {
       this.loadGoodsForCategory(index, category._id);
     }
   },

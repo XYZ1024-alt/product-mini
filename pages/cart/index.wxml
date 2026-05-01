@@ -1,38 +1,44 @@
-<!-- 分层购物车 -->
-<block wx:if="{{cartGroupData.isNotEmpty}}">
-  <view class="cart-header" wx:if="{{cartGroupData.isNotEmpty}}">
+<block wx:if="{{isLogin && cartGroupData.isNotEmpty}}">
+  <view class="cart-header">
     <view class="cart-header__title">购物车共 {{cartGroupData.selectedGoodsCount}} 件商品</view>
-    <!-- 添加清空按钮 -->
     <view class="cart-header__clear" bindtap="onClearCart">
       <t-icon name="delete" size="32rpx" /> 清空全部
     </view>
   </view>
+
   <cart-group
-    store-goods="{{ cartGroupData.storeGoods }}"
-    invalid-good-items="{{ cartGroupData.invalidGoodItems }}"
-    bindselectgoods="onGoodsSelect"
-    bindselectstore="onStoreSelect"
-    bindchangequantity="onQuantityChange"
-    bindgocollect="goCollect"
-    bindgoodsclick="goGoodsDetail"
-    bindclearinvalidgoods="clearInvalidGoods"
-    binddelete="onGoodsDelete"
+          store-goods="{{ cartGroupData.storeGoods }}"
+          invalid-good-items="{{ cartGroupData.invalidGoodItems }}"
+          bindselectgoods="onGoodsSelect"
+          bindchangequantity="onQuantityChange"
+          bindgocollect="goCollect"
+          bindgoodsclick="goGoodsDetail"
+          bindclearinvalidgoods="clearInvalidGoods"
+          binddelete="onGoodsDelete"
   />
 
   <view class="gap" />
-  <!-- 商品小计以及结算按钮 -->
+
   <cart-bar
-    is-all-selected="{{cartGroupData.isAllSelected}}"
-    total-amount="{{cartGroupData.totalAmount}}"
-    total-goods-num="{{cartGroupData.selectedGoodsCount}}"
-    total-discount-amount="{{cartGroupData.totalDiscountAmount}}"
-    fixed="{{true}}"
-    bottomHeight="{{110}}"
-    bindhandleSelectAll="onSelectAll"
-    bindhandleToSettle="onToSettle"
+          is-all-selected="{{cartGroupData.isAllSelected}}"
+          total-amount="{{cartGroupData.totalAmount}}"
+          total-goods-num="{{cartGroupData.selectedGoodsCount}}"
+          total-discount-amount="{{cartGroupData.totalDiscountAmount}}"
+          fixed="{{true}}"
+          bottomHeight="{{110}}"
+          bindhandleSelectAll="onSelectAll"
+          bindhandleToSettle="onToSettle"
   />
 </block>
-<!-- 购物车空态 -->
+
+<cart-empty
+        wx:elif="{{!isLogin}}"
+        tip="登录后即可查看购物车商品"
+        btnText="去登录"
+        bind:handleClick="onGotoLogin"
+/>
+
 <cart-empty wx:else bind:handleClick="onGotoHome" />
+
 <t-toast id="t-toast" />
 <t-dialog id="t-dialog" />
