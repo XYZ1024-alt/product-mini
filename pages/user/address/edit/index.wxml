@@ -56,7 +56,7 @@
               slot="note"
               type="text"
               value="{{locationState.detailAddress}}"
-              placeholder="门牌号等(例如:10栋1001号)"
+              placeholder="门牌号等"
               autosize
               bind:change="onInputValue"
               data-item="detailAddress"
